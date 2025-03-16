@@ -6,3 +6,6 @@ uv.lock
 main.exp
 main.lib
 main.obj
+dataset/Wan
+Models/
+Output_LoRAs/

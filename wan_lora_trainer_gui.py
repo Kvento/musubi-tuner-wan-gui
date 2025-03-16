@@ -30,7 +30,7 @@ class LoRATrainerGUI:
 
         # Initialize settings with default values, including conversion settings
         self.settings = {
-            "DATASET_CONFIG": "dataset/Wan/SM/SM_14B_v1.toml",
+            "DATASET_CONFIG": "dataset/dataset_example.toml",
             "VAE_MODEL": "Models/Wan/Wan2.1_VAE.pth",
             "CLIP_MODEL": "Models/Wan/models_clip_open-clip-xlm-roberta-large-vit-huge-14.pth",
             "T5_MODEL": "Models/Wan/models_t5_umt5-xxl-enc-bf16.pth",

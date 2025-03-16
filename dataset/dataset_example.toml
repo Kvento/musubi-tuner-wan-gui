@@ -1,0 +1,44 @@
+# resolution, caption_extension, target_frames, frame_extraction, frame_stride, frame_sample, 
+# batch_size, num_repeats, enable_bucket, bucket_no_upscale should be set in either general or datasets
+
+
+# general configurations
+[general]
+caption_extension = ".txt"
+batch_size = 1
+enable_bucket = true
+bucket_no_upscale = false
+
+
+# dataset configurations
+[[datasets]]
+resolution = [160, 160]
+video_directory = "D:/musubi-tuner-wan-gui/dataset/My_Best_Lora_dataset/video"  # path to your video dataset
+cache_directory = "D:/musubi-tuner-wan-gui/dataset/My_Best_Lora_dataset/cache/video" # recommended to set cache directory
+target_frames = [17, 33, 65]
+frame_extraction = "chunk"
+num_repeats = 1
+
+# head: Extract the first N frames from the video.
+# chunk: Extract frames by splitting the video into chunks of N frames.
+# slide: Extract frames from the video with a stride of frame_stride.
+# uniform: Extract frame_sample samples uniformly from the video.
+# NOTE: Please do not include 1 in target_frames if you are using the frame_extraction "chunk". It will make the all frames to be extracted.
+
+# More info here: https://github.com/Kvento/musubi-tuner-wan-gui/blob/main/dataset/dataset_config.md
+
+
+
+
+
+
+
+# other datasets can be added here. each dataset can have different configurations
+
+# If you don't need image training, remove this code:
+# dataset configurations
+[[datasets]]
+resolution = [256, 256]
+image_directory = "D:/musubi-tuner-wan-gui/dataset/My_Best_Lora_dataset/images" # path to your image dataset
+cache_directory = "D:/musubi-tuner-wan-gui/dataset/My_Best_Lora_dataset/cache/images" # recommended to set cache directory
+num_repeats = 1

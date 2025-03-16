@@ -1,3 +1,14 @@
+# GUIの使い方
+
+- GUIを開くには、次のコマンドを実行します - `Start_Wan_GUI.bat`
+- すべての設定は、 "**Load Settings**" および "**Save Setting**" ボタンを使用して保存および読み込むことができます。
+- 設定の詳細については以下を参照してください。 [Wan2.1 documentation](./docs/wan.md), [Advanced Configuration](./docs/advanced_config.md#fp8-quantization), [Dataset configuration guide](./dataset/dataset_config.md).
+
+
+![Preview](docs/Preview.png)
+
+
+
 # Musubi Tuner
 
 [English](./README.md) | [日本語](./README.ja.md)

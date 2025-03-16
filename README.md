@@ -1,17 +1,18 @@
+# Musubi Tuner
+
+[English](./README.md) | [日本語](./README.ja.md)
+
+
 # How to use GUI
 
-- To open the GUI just run `Start_Wan_GUI.bat`
-- All settings can be saved and loaded using the "**Load Settings**" and "**Save Setting**" buttons
+- To open the GUI just run `Start_Wan_GUI.bat`.
+- All settings can be saved and loaded using the "**Load Settings**" and "**Save Setting**" buttons.
 - More info about settings see in [Wan2.1 documentation](./docs/wan.md), [Advanced Configuration](./docs/advanced_config.md#fp8-quantization), [Dataset configuration guide](./dataset/dataset_config.md).
 
 
 ![Preview](docs/Preview.png)
 
 
-
-# Musubi Tuner
-
-[English](./README.md) | [日本語](./README.ja.md)
 
 ## Table of Contents
 
@@ -25,7 +26,7 @@
     - [Features](#features)
   - [Installation](#installation)
     - [pip based installation](#pip-based-installation)
-    - [uv based installation](#uv-based-installation)
+    - [uv based installation](#uv-based-installation-experimenal)
     - [Linux/MacOS](#linuxmacos)
     - [Windows](#windows)
   - [Model Download](#model-download)

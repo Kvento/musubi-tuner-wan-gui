@@ -602,6 +602,7 @@ class LoRATrainerGUI:
         threading.Thread(target=check_process, daemon=True).start()
 
     def start_training(self):
+        """Запускает обучение с последовательным выполнением процессов кэширования"""
         # Check for unsupported optimizer
         optimizer_type = self.entries["OPTIMIZER_TYPE"].get()
         if optimizer_type == "came":
@@ -769,18 +770,22 @@ class LoRATrainerGUI:
             "--fp8_t5"
         ]
 
-        def on_cache_complete():
-            self.update_console("Cache preparation completed.\nStarting training...\n")
-            self.run_subprocess(command, "Training")
-
         self.console_output.configure(state="normal")
         self.console_output.delete(1.0, tk.END)
         self.console_output.configure(state="disabled")
 
         if self.enable_cache_var.get():
             self.update_console("Starting cache preparation...\n")
-            self.run_subprocess(cache_preparation_command, "Cache Preparation", on_cache_complete)
-            self.run_subprocess(text_encoder_caching_command, "Text Encoder Caching")
+
+            def on_text_encoder_caching_complete():
+                self.update_console("Text encoder caching completed.\nStarting training...\n")
+                self.run_subprocess(command, "Training")
+
+            def on_cache_preparation_complete():
+                self.update_console("Cache preparation completed.\nStarting text encoder caching...\n")
+                self.run_subprocess(text_encoder_caching_command, "Text Encoder Caching", on_text_encoder_caching_complete)
+
+            self.run_subprocess(cache_preparation_command, "Cache Preparation", on_cache_preparation_complete)
         else:
             self.update_console("Starting training without caching...\n")
             self.run_subprocess(command, "Training")

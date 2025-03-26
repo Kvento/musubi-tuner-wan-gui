@@ -551,9 +551,9 @@ class LoRATrainerGUI:
         self.run_subprocess(command, "Conversion")
 
     def run_subprocess(self, cmd, name, callback=None):
-        """Run a subprocess and handle its output"""
+        """Run a subprocess and handle its output with UTF-8 encoding"""
         env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONIOENCODING"] = "utf-8"  # Устанавливаем UTF-8 для среды выполнения
 
         if os.name == 'nt':
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -562,13 +562,15 @@ class LoRATrainerGUI:
             creationflags = 0
             preexec_fn = os.setsid
 
+        # Запускаем подпроцесс с явным указанием кодировки UTF-8
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
+            text=True,  # Включаем текстовый режим для автоматической декодировки
+            bufsize=1,  # Построчная буферизация
+            universal_newlines=True,  # Поддержка универсальных переносов строк
+            encoding='utf-8',  # Явно указываем кодировку UTF-8 для вывода
             env=env,
             creationflags=creationflags,
             preexec_fn=preexec_fn
@@ -578,21 +580,20 @@ class LoRATrainerGUI:
             self.process_group_id = process.pid
 
         def read_output(pipe, output_type):
+            """Читает вывод подпроцесса построчно"""
             while True:
                 line = pipe.readline()
                 if not line:
                     break
-                try:
-                    line = line.encode('utf-8').decode('utf-8')
-                except UnicodeEncodeError:
-                    line = line.encode('utf-8').decode('utf-8', errors='ignore')
                 self.master.after(0, self.update_console, f"{name} {output_type}: {line}")
             pipe.close()
 
+        # Запускаем потоки для чтения stdout и stderr
         threading.Thread(target=read_output, args=(process.stdout, "STDOUT"), daemon=True).start()
         threading.Thread(target=read_output, args=(process.stderr, "STDERR"), daemon=True).start()
 
         def check_process():
+            """Проверяет завершение подпроцесса"""
             process.wait()
             self.master.after(0, self.update_console, f"{name} process completed.\n")
             self.current_process = None

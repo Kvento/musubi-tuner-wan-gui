@@ -1,12 +1,9 @@
 import argparse
-
 import torch
 from safetensors.torch import load_file, save_file
 from safetensors import safe_open
 from utils import model_utils
-
 import logging
-
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +33,6 @@ def convert_from_diffusers(prefix, weights_sd):
     # add alpha with rank
     for lora_name, dim in lora_dims.items():
         new_weights_sd[f"{lora_name}.alpha"] = torch.tensor(dim)
-
     return new_weights_sd
 
 
@@ -59,22 +55,21 @@ def convert_to_diffusers(prefix, weights_sd):
 
             lora_name = key.split(".", 1)[0]  # before first dot
 
-            module_name = lora_name[len(prefix) :]  # remove "lora_unet_"
+            module_name = lora_name[len(prefix) :]  # remove prefix
             module_name = module_name.replace("_", ".")  # replace "_" with "."
             if ".cross.attn." in module_name or ".self.attn." in module_name:
                 # Wan2.1 lora name to module name: ugly but works
-                module_name = module_name.replace("cross.attn", "cross_attn")  # fix cross attn
-                module_name = module_name.replace("self.attn", "self_attn")  # fix self attn
-                module_name = module_name.replace("k.img", "k_img")  # fix k img
-                module_name = module_name.replace("v.img", "v_img")  # fix v img
+                module_name = module_name.replace("cross.attn", "cross_attn")
+                module_name = module_name.replace("self.attn", "self_attn")
+                module_name = module_name.replace("k.img", "k_img")
+                module_name = module_name.replace("v.img", "v_img")
             else:
                 # HunyuanVideo lora name to module name: ugly but works
-                module_name = module_name.replace("double.blocks.", "double_blocks.")  # fix double blocks
-                module_name = module_name.replace("single.blocks.", "single_blocks.")  # fix single blocks
-                module_name = module_name.replace("img.", "img_")  # fix img
-                module_name = module_name.replace("txt.", "txt_")  # fix txt
-                module_name = module_name.replace("attn.", "attn_")  # fix attn
-
+                module_name = module_name.replace("double.blocks.", "double_blocks.")
+                module_name = module_name.replace("single.blocks.", "single_blocks.")
+                module_name = module_name.replace("img.", "img_")
+                module_name = module_name.replace("txt.", "txt_")
+                module_name = module_name.replace("attn.", "attn_")
             diffusers_prefix = "diffusion_model"
             if "lora_down" in key:
                 new_key = f"{diffusers_prefix}.{module_name}.lora_A.weight"
@@ -86,12 +81,11 @@ def convert_to_diffusers(prefix, weights_sd):
                 logger.warning(f"unexpected key: {key} in default LoRA format")
                 continue
 
-            # scale weight by alpha
+            # scale weight by alpha using float16
             if lora_name in lora_alphas:
-                # we scale both down and up, so scale is sqrt
-                scale = lora_alphas[lora_name] / dim
+                scale = lora_alphas[lora_name].half() / dim
                 scale = scale.sqrt()
-                weight = weight * scale
+                weight = weight.half() * scale
             else:
                 logger.warning(f"missing alpha for {lora_name}")
 

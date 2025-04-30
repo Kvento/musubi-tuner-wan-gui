@@ -24,7 +24,7 @@ import toml
 
 import torch
 from tqdm import tqdm
-from accelerate.utils import set_seed
+from accelerate.utils import TorchDynamoPlugin, set_seed, DynamoBackend
 from accelerate import Accelerator, InitProcessGroupKwargs, DistributedDataParallelKwargs, PartialState
 from safetensors.torch import load_file
 import transformers
@@ -159,11 +159,21 @@ def prepare_accelerator(args: argparse.Namespace) -> Accelerator:
     ]
     kwargs_handlers = [i for i in kwargs_handlers if i is not None]
 
+    dynamo_plugin = None
+    if args.dynamo_backend.upper() != "NO":
+        dynamo_plugin = TorchDynamoPlugin(
+            backend=DynamoBackend(args.dynamo_backend.upper()),
+            mode=args.dynamo_mode,
+            fullgraph=args.dynamo_fullgraph,
+            dynamic=args.dynamo_dynamic,
+        )
+
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=log_with,
         project_dir=logging_dir,
+        dynamo_plugin=dynamo_plugin,
         kwargs_handlers=kwargs_handlers,
     )
     print("accelerator device:", accelerator.device)
@@ -226,6 +236,11 @@ def line_to_prompt_dict(line: str) -> dict:
             m = re.match(r"i (.+)", parg, re.IGNORECASE)
             if m:  # negative prompt
                 prompt_dict["image_path"] = m.group(1)
+                continue
+
+            m = re.match(r"cn (.+)", parg, re.IGNORECASE)
+            if m:
+                prompt_dict["control_video_path"] = m.group(1)
                 continue
 
         except ValueError as ex:
@@ -871,7 +886,7 @@ class NetworkTrainer:
         transformer.switch_block_swap_for_inference()
 
         # Create a directory to save the samples
-        save_dir = args.output_dir + "/sample"
+        save_dir = os.path.join(args.output_dir, "sample")
         os.makedirs(save_dir, exist_ok=True)
 
         # save random state to restore later
@@ -918,12 +933,14 @@ class NetworkTrainer:
         width = sample_parameter.get("width", 256)  # make smaller for faster and memory saving inference
         height = sample_parameter.get("height", 256)
         frame_count = sample_parameter.get("frame_count", 1)
-        guidance_scale = sample_parameter.get("guidance_scale", 6.0)
+        guidance_scale = sample_parameter.get("guidance_scale", self.default_guidance_scale)
         discrete_flow_shift = sample_parameter.get("discrete_flow_shift", 14.5)
         seed = sample_parameter.get("seed")
         prompt: str = sample_parameter.get("prompt", "")
         cfg_scale = sample_parameter.get("cfg_scale", None)  # None for architecture default
         negative_prompt = sample_parameter.get("negative_prompt", None)
+
+        frame_count = (frame_count - 1) // 4 * 4 + 1  # 1, 5, 9, 13, ... For HunyuanVideo and Wan2.1
 
         if self.i2v_training:
             image_path = sample_parameter.get("image_path", None)
@@ -932,6 +949,16 @@ class NetworkTrainer:
                 return
         else:
             image_path = None
+
+        if self.control_training:
+            control_video_path = sample_parameter.get("control_video_path", None)
+            if control_video_path is None:
+                logger.error(
+                    "No control_video_path for control model / controlモデルのサンプル画像生成にはcontrol_video_pathが必要です"
+                )
+                return
+        else:
+            control_video_path = None
 
         device = accelerator.device
         if seed is not None:
@@ -962,6 +989,8 @@ class NetworkTrainer:
 
         if self.i2v_training:
             logger.info(f"image path: {image_path}")
+        if self.control_training:
+            logger.info(f"control video path: {control_video_path}")
 
         # inference: architecture dependent
         video = self.do_inference(
@@ -981,9 +1010,14 @@ class NetworkTrainer:
             guidance_scale,
             cfg_scale,
             image_path=image_path,
+            control_video_path=control_video_path,
         )
 
         # Save video
+        if video is None:
+            logger.error("No video generated / 生成された動画がありません")
+            return
+
         ts_str = time.strftime("%Y%m%d%H%M%S", time.localtime())
         num_suffix = f"e{epoch:06d}" if epoch is not None else f"{steps:06d}"
         seed_suffix = "" if seed is None else f"_{seed}"
@@ -1017,9 +1051,17 @@ class NetworkTrainer:
         if self._i2v_training:
             logger.info("I2V training mode")
 
+        self._control_training = False  # HunyuanVideo does not support control training yet
+
+        self.default_guidance_scale = 6.0
+
     @property
     def i2v_training(self) -> bool:
         return self._i2v_training
+
+    @property
+    def control_training(self) -> bool:
+        return self._control_training
 
     def process_sample_prompts(
         self,
@@ -1109,6 +1151,7 @@ class NetworkTrainer:
         guidance_scale,
         cfg_scale,
         image_path=None,
+        control_video_path=None,
     ):
         """architecture dependent inference"""
         device = accelerator.device
@@ -1349,6 +1392,12 @@ class NetworkTrainer:
         if args.dit is None:
             raise ValueError("path to DiT model is required / DiTモデルのパスが必要です")
         assert not args.fp8_scaled or args.fp8_base, "fp8_scaled requires fp8_base / fp8_scaledはfp8_baseが必要です"
+
+        if args.sage_attn:
+            raise ValueError(
+                "SageAttention doesn't support training currently. Please use `--sdpa` or `--xformers` etc. instead."
+                " / SageAttentionは現在学習をサポートしていないようです。`--sdpa`や`--xformers`などの他のオプションを使ってください"
+            )
 
         # check model specific arguments
         self.handle_model_specific_args(args)
@@ -2244,6 +2293,34 @@ def setup_parser_common() -> argparse.ArgumentParser:
     parser.add_argument("--fp8_base", action="store_true", help="use fp8 for base model / base modelにfp8を使う")
     # parser.add_argument("--full_fp16", action="store_true", help="fp16 training including gradients / 勾配も含めてfp16で学習する")
     # parser.add_argument("--full_bf16", action="store_true", help="bf16 training including gradients / 勾配も含めてbf16で学習する")
+
+    parser.add_argument(
+        "--dynamo_backend",
+        type=str,
+        default="NO",
+        choices=[e.value for e in DynamoBackend],
+        help="dynamo backend type (default is None) / dynamoのbackendの種類（デフォルトは None）",
+    )
+
+    parser.add_argument(
+        "--dynamo_mode",
+        type=str,
+        default=None,
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help="dynamo mode (default is default) / dynamoのモード（デフォルトは default）",
+    )
+
+    parser.add_argument(
+        "--dynamo_fullgraph",
+        action="store_true",
+        help="use fullgraph mode for dynamo / dynamoのfullgraphモードを使う",
+    )
+
+    parser.add_argument(
+        "--dynamo_dynamic",
+        action="store_true",
+        help="use dynamic mode for dynamo / dynamoのdynamicモードを使う",
+    )
 
     parser.add_argument(
         "--blocks_to_swap",
